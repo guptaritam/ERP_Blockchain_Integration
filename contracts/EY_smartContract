@@ -1,0 +1,127 @@
+pragma solidity ^ 0.4 .17;
+
+contract SupplyChain{
+    
+    uint lotId;
+    uint penaltyCharge; 
+    uint detentionCharge;
+    
+    struct lot{
+        string lotItem;
+        uint lotPrice; 
+        uint256 requestedDeliveryTime; 
+        string lotStatus; 
+    }
+    
+    struct inbound{
+        uint256 checkin;
+        uint256 checkout;
+        bool checkinOtpVerification;
+        bool checkoutOtpVerification;
+    }
+    
+    struct outbound{
+        uint256 checkin;
+        uint256 checkout;
+        bool checkinOtpVerification;
+        bool checkoutOtpVerification;
+    }
+    
+    mapping(uint => lot) lots; 
+    mapping(uint => inbound) inbounds;
+    mapping(uint => outbound) outbounds;
+    mapping(uint => uint) penalties;
+    mapping(uint => uint) inboundDetentionCharges; 
+    mapping(uint => uint) outboundDetentionCharges;
+    
+    event RegisterEvent(string _actionPerformed, uint _lotId, string _lotItem, uint _lotPrice, uint256 _requestedDeliveryTime, string _lotStatus, uint256 _timestamp);
+    event ApprovalEvent(string _nature, uint _lotId, bool _otpVerification, uint256 _timestamp);
+    event CheckEvent(string _nature, uint _lotId, uint256 _time);
+    event ChargeEvent(string _chargeType, uint _lotId, uint _amount);
+    
+    function registerLot(uint _lotId, string _lotItem, uint _lotPrice, uint256 _requestedDeliveryTime){
+        lots[_lotId].lotItem = _lotItem;
+        lots[_lotId].lotPrice = _lotPrice;
+        lots[_lotId].requestedDeliveryTime = _requestedDeliveryTime;
+        lots[_lotId].lotStatus = "Processing";
+        
+        RegisterEvent( "LOT REGISTERED", _lotId, _lotItem, _lotPrice, _requestedDeliveryTime, lots[_lotId].lotStatus, now);
+    }
+    
+    function viewLot(uint _lotId) returns(string, uint, uint256, string){
+        return (lots[_lotId].lotItem, lots[_lotId].lotPrice, lots[_lotId].requestedDeliveryTime, lots[_lotId].lotStatus);
+    }
+    //checkin time lu ya seedha now daaldu ? 
+    function inboundCheckin(uint _lotId, uint256 _checkinTime){
+        inbounds[_lotId].checkin = _checkinTime;
+        CheckEvent("INBOUND CHECK-IN", _lotId, _checkinTime);
+    }
+    
+    function inboundCheckout(uint _lotId, uint256 _checkoutTime){
+        inbounds[_lotId].checkout = _checkoutTime;
+        CheckEvent("INBOUND CHECK-OUT", _lotId, _checkoutTime);
+    } 
+    
+    function inboundCheckinApproval(uint _lotId){
+        inbounds[_lotId].checkinOtpVerification = true;
+        ApprovalEvent("INBOUND CHECKIN APPROVAL", _lotId, true, now);
+    }
+    
+    function inboundCheckoutApproval(uint _lotId){
+        inbounds[_lotId].checkoutOtpVerification = true; 
+        ApprovalEvent("INBOUND CHECKOUT APPROVAL", _lotId, true, now);
+        calculateInboundDetentionCharge(_lotId);
+    }
+    
+    function outboundCheckin(uint _lotId, uint256 _checkinTime){
+        outbounds[_lotId].checkin = _checkinTime;
+        CheckEvent("OUTBOUND CHECK-IN", _lotId, _checkinTime);
+    }
+    
+    function outboundCheckout(uint _lotId, uint256 _checkoutTime){
+        inbounds[_lotId].checkout = _checkoutTime;
+        CheckEvent("OUTBOUND CHECK-OUT", _lotId, _checkoutTime);
+    } 
+    
+    function outboundCheckinApproval(uint _lotId){
+        outbounds[_lotId].checkinOtpVerification = true;
+        ApprovalEvent("OUTBOUND CHECKIN APPROVAL", _lotId, true, now);
+        calculatePenaltyCharge(_lotId);
+    }
+    
+    function outboundCheckoutApproval(uint _lotId){
+        outbounds[_lotId].checkoutOtpVerification = true; 
+        lots[_lotId].lotStatus = "Delivered"; 
+        ApprovalEvent("OUTBOUND CHECKOUT APPROVAL", _lotId, true, now);
+        calculateOutboundDetentionCharge(_lotId);
+    }
+    
+    function calculatePenaltyCharge(uint _lotIdNumber){
+        if(outbounds[_lotIdNumber].checkin > lots[_lotIdNumber].requestedDeliveryTime + 30mins){
+            penalties[_lotIdNumber] = 0.03 * lots[_lotIdNumber].lotPrice; 
+        }
+        else {
+            penalties[_lotIdNumber] = 0; 
+        }
+        
+        ChargeEvent("PENALTY", _lotIdNumber, penalties[_lotIdNumber]);
+    }
+    
+    function viewPenalty(uint _lotId) returns(uint){
+        return(penalties[_lotId]);
+    }
+    
+    function calculateInboundDetentionCharge(uint _lotIdNumber){
+        uint256 detentionTime = inbounds[_lotIdNumber].checkout - inbounds[_lotIdNumber].checkin; 
+        inboundDetentionCharges[_lotIdNumber] = (detentionTime/1hr) * 60 dollars;
+        
+        ChargeEvent("INBOUND DETENTION", _lotIdNumber, inboundDetentionCharges[_lotIdNumber]);
+    }
+    
+    function calculateOutboundDetentionCharge(uint _lotIdNumber){
+        uint256 detentionTime = outbounds[_lotIdNumber].checkout - outbounds[_lotIdNumber].checkin; 
+        outboundDetentionCharges[_lotIdNumber] = (detentionTime/1hr) * 60 dollars;
+        
+        ChargeEvent("OUTBOUND DETENTION", _lotIdNumber, outboundDetentionCharges[_lotIdNumber]);
+    }
+}
